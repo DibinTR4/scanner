@@ -3,11 +3,25 @@ import 'package:flutter/material.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 class SelectedImagePage extends StatelessWidget {
   final List<File> images;
 
   const SelectedImagePage({super.key, required this.images});
+
+  Future<bool> requestStoragePermission() async {
+    if (Platform.isAndroid) {
+      if (await Permission.manageExternalStorage.isGranted) {
+        return true;
+      }
+
+      var status = await Permission.manageExternalStorage.request();
+      return status.isGranted;
+    }
+    return true;
+  }
 
   Future<void> createPdfAndSave(BuildContext context) async {
     final pdf = pw.Document();
@@ -15,20 +29,30 @@ class SelectedImagePage extends StatelessWidget {
     for (var imageFile in images) {
       final image = pw.MemoryImage(imageFile.readAsBytesSync());
       pdf.addPage(
-        pw.Page(build: (pw.Context context) => pw.Center(child: pw.Image(image))),
+        pw.Page(
+            build: (pw.Context context) => pw.Center(child: pw.Image(image))),
       );
     }
 
-    final status = await Permission.storage.request();
-    if (!status.isGranted) {
+    if (!await requestStoragePermission()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Storage permission denied")),
+        SnackBar(
+          content: const Text(
+              "Storage permission denied. Please enable it in settings."),
+          action: SnackBarAction(
+            label: "Open Settings",
+            onPressed: () {
+              openAppSettings();
+            },
+          ),
+        ),
       );
       return;
     }
 
     final downloadsDir = Directory('/storage/emulated/0/Download');
-    final fileName = "converted_images_${DateTime.now().millisecondsSinceEpoch}.pdf";
+    final fileName =
+        "converted_images_${DateTime.now().millisecondsSinceEpoch}.pdf";
     final file = File(path.join(downloadsDir.path, fileName));
 
     await file.writeAsBytes(await pdf.save());
